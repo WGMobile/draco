@@ -13,6 +13,8 @@
 // limitations under the License.
 //
 #include "draco/unity/draco_unity_plugin.h"
+#include "draco/core/encoder_buffer.h"
+#include "draco/compression/encode.h"
 
 #ifdef BUILD_UNITY_PLUGIN
 
@@ -186,6 +188,110 @@ int EXPORT_API DecodeDracoMesh(char *data, unsigned int length,
   return unity_mesh->num_faces;
 }
 
+int EXPORT_API EncodeUnityMesh(char **data, DracoToUnityMesh **unityMesh) {
+  draco::Encoder encoder;
+    // Encode the geometry.
+  draco::EncoderBuffer buffer;
+
+  DracoToUnityMesh *unityMeshTemp = *unityMesh;
+  draco::Mesh encodeMesh;
+  encodeMesh.set_num_points(unityMeshTemp->num_vertices);
+
+  GeometryAttribute pos;
+  pos.Init(GeometryAttribute::POSITION, nullptr, 3, DT_FLOAT32, false, sizeof(float) * 3, 0);
+  int posAttId = encodeMesh.AddAttribute(pos, true, unityMeshTemp->num_vertices);
+
+  auto posAtt = encodeMesh.attribute(posAttId);
+  for (int i = 0; i < unityMeshTemp->num_vertices; ++i) {
+    float tmpVertex[3];
+    tmpVertex[0] = unityMeshTemp->position[i * 3];
+    tmpVertex[1] = unityMeshTemp->position[i * 3 + 1];
+    tmpVertex[2] = unityMeshTemp->position[i * 3 + 2];
+    posAtt->SetAttributeValue(AttributeValueIndex(i), tmpVertex);
+  }
+
+  for (int i = 0; i < unityMeshTemp->num_faces; ++i) {
+    Mesh::Face face;
+    face[0] = unityMeshTemp->indices[i * 3];
+    face[1] = unityMeshTemp->indices[i * 3 + 1];
+    face[2] = unityMeshTemp->indices[i * 3 + 2];
+    encodeMesh.SetFace(FaceIndex(i), face);
+  }
+
+  if (unityMeshTemp->has_normal) {
+    GeometryAttribute Nom;
+    Nom.Init(GeometryAttribute::NORMAL, nullptr, 3, DT_FLOAT32, false, sizeof(float) * 3, 0);
+    int norAttId = encodeMesh.AddAttribute(Nom, true, unityMeshTemp->num_faces);
+
+    draco::PointAttribute *norAtt = encodeMesh.attribute(norAttId);
+    for (int i = 0; i < unityMeshTemp->num_vertices; ++i) {
+      float tmpNormal[3];
+      tmpNormal[0] = unityMeshTemp->normal[i * 3];
+      tmpNormal[1] = unityMeshTemp->normal[i * 3 + 1];
+      tmpNormal[2] = unityMeshTemp->normal[i * 3 + 2];
+      norAtt->SetAttributeValue(AttributeValueIndex(i), tmpNormal);
+    }
+  }
+
+  if (unityMeshTemp->has_uv0) {
+    GeometryAttribute UV;
+    UV.Init(GeometryAttribute::TEX_COORD, nullptr, 2, DT_FLOAT32, false, sizeof(float) * 2, 0);
+    int uvAttId = encodeMesh.AddAttribute(UV, true, unityMeshTemp->num_vertices);
+
+    draco::PointAttribute *uvAtt = encodeMesh.attribute(uvAttId);
+    for (int i = 0; i < unityMeshTemp->num_vertices; ++i) {
+      float tmpUV[2];
+      tmpUV[0] = unityMeshTemp->texcoord0[i * 2];
+      tmpUV[1] = unityMeshTemp->texcoord0[i * 2 + 1];
+      uvAtt->SetAttributeValue(AttributeValueIndex(i), tmpUV);
+    }
+  }
+
+  if (unityMeshTemp->has_uv1) {
+    GeometryAttribute UV;
+    UV.Init(GeometryAttribute::TEX_COORD, nullptr, 2, DT_FLOAT32, false, sizeof(float) * 2, 0);
+    int uvAttId = encodeMesh.AddAttribute(UV, true, unityMeshTemp->num_vertices);
+
+    draco::PointAttribute *uvAtt = encodeMesh.attribute(uvAttId);
+    for (int i = 0; i < unityMeshTemp->num_vertices; ++i) {
+      float tmpUV[2];
+      tmpUV[0] = unityMeshTemp->texcoord1[i * 2];
+      tmpUV[1] = unityMeshTemp->texcoord1[i * 2 + 1];
+      uvAtt->SetAttributeValue(AttributeValueIndex(i), tmpUV);
+    }
+  }
+
+  if(unityMeshTemp->num_submesh > 0) {
+    auto sub_mesh_mapdata = std::unique_ptr<GeometryMetadata>(new GeometryMetadata());
+    sub_mesh_mapdata->AddEntryInt("submeshCount", unityMeshTemp->num_submesh);
+
+    auto submeshDescriptors = std::unique_ptr<std::vector<int>>(new std::vector<int>());
+    int submeshDescriptorOffset = 0;
+    for (int submeshIndex = 0; submeshIndex < unityMeshTemp->num_submesh; submeshIndex++) {
+        submeshDescriptors->push_back(unityMeshTemp->submesh[submeshDescriptorOffset++]);
+        submeshDescriptors->push_back(unityMeshTemp->submesh[submeshDescriptorOffset++]);
+    }
+    sub_mesh_mapdata->AddEntryIntArray("submeshRanges", *submeshDescriptors);
+
+    encodeMesh.AddMetadata(std::move(sub_mesh_mapdata));
+  }
+
+  encoder.SetSpeedOptions(10, 10);
+  const draco::Status status = encoder.EncodeMeshToBuffer(encodeMesh, &buffer);
+  if (!status.ok()) {
+    printf("Failed to encode the mesh.\n");
+    printf("%s\n", status.error_msg());
+    return -1;
+  }
+
+  *data = new char[buffer.size()];
+
+  const char *dataPoint = buffer.data();
+  memcpy(*data, (void *)dataPoint, buffer.size());
+
+  return buffer.size();
+}
+
 bool EXPORT_API GetAttribute(const DracoMesh *mesh, int index,
                              DracoAttribute **attribute) {
   if (mesh == nullptr || attribute == nullptr || *attribute != nullptr) {
@@ -249,6 +355,37 @@ bool EXPORT_API GetMeshIndices(const DracoMesh *mesh, DracoData **indices) {
   return true;
 }
 
+int EXPORT_API GetSubmeshRanges(const DracoMesh *mesh, DracoData **indices) {
+  if (mesh == nullptr || indices == nullptr || *indices != nullptr) {
+    return -1;
+  }
+  const Mesh *const m = static_cast<const Mesh *>(mesh->private_mesh);
+  const GeometryMetadata *sub_mesh_mapData = m->GetMetadata();
+
+  int *temp_indices = nullptr;
+  int submeshCount = 0;
+  if (sub_mesh_mapData != nullptr) {
+    if (sub_mesh_mapData->GetEntryInt("submeshCount", &submeshCount)) {
+      temp_indices = new int [submeshCount * 2];
+      for (int submeshIndex = 0; submeshIndex < submeshCount; submeshIndex++) {
+        std::vector<int> submeshRanges;
+        if (sub_mesh_mapData->GetEntryIntArray("submeshRanges", &submeshRanges)) {
+          for (int i = 0; i < submeshRanges.size(); i++) {
+            temp_indices[i] = submeshRanges.at(i);
+          }
+        }
+      }
+    }
+
+    DracoData *const draco_data = new DracoData();
+    draco_data->data = temp_indices;
+    draco_data->data_type = DT_INT32;
+    *indices = draco_data;
+  }
+
+  return submeshCount;
+}
+
 bool EXPORT_API GetAttributeData(const DracoMesh *mesh,
                                  const DracoAttribute *attribute,
                                  DracoData **data) {
@@ -270,6 +407,14 @@ bool EXPORT_API GetAttributeData(const DracoMesh *mesh,
   return true;
 }
 
+void EXPORT_API FreeDracoMesh(char **data) {
+  if (*data == nullptr) {
+    return;
+  }
+  delete[] * data;
+  data = nullptr;
+}
+
 void ReleaseUnityMesh(DracoToUnityMesh **mesh_ptr) {
   DracoToUnityMesh *mesh = *mesh_ptr;
   if (!mesh) {
@@ -288,10 +433,10 @@ void ReleaseUnityMesh(DracoToUnityMesh **mesh_ptr) {
     mesh->has_normal = false;
     mesh->normal = nullptr;
   }
-  if (mesh->has_texcoord && mesh->texcoord) {
-    delete[] mesh->texcoord;
-    mesh->has_texcoord = false;
-    mesh->texcoord = nullptr;
+  if (mesh->has_uv0 && mesh->texcoord0) {
+    delete[] mesh->texcoord0;
+    mesh->has_uv0 = false;
+    mesh->texcoord0 = nullptr;
   }
   if (mesh->has_color && mesh->color) {
     delete[] mesh->color;
@@ -386,13 +531,13 @@ int DecodeMeshForUnity(char *data, unsigned int length,
   const auto texcoord_att =
       in_mesh->GetNamedAttribute(draco::GeometryAttribute::TEX_COORD);
   if (texcoord_att != nullptr) {
-    unity_mesh->texcoord = new float[in_mesh->num_points() * 2];
-    unity_mesh->has_texcoord = true;
+    unity_mesh->texcoord0 = new float[in_mesh->num_points() * 2];
+    unity_mesh->has_uv0 = true;
     for (draco::PointIndex i(0); i < in_mesh->num_points(); ++i) {
       const draco::AttributeValueIndex val_index =
           texcoord_att->mapped_index(i);
       if (!texcoord_att->ConvertValue<float, 2>(
-              val_index, unity_mesh->texcoord + i.value() * 2)) {
+              val_index, unity_mesh->texcoord0 + i.value() * 2)) {
         ReleaseUnityMesh(&unity_mesh);
         return -8;
       }

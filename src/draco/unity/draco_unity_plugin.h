@@ -31,6 +31,7 @@
 #endif  // defined(_MSC_VER)
 
 namespace draco {
+struct DracoToUnityMesh;
 
 extern "C" {
 
@@ -81,8 +82,9 @@ void EXPORT_API ReleaseDracoData(DracoData **data_ptr);
 
 // Decodes compressed Draco mesh in |data| and returns |mesh|. On input, |mesh|
 // must be null. The returned |mesh| must be released with ReleaseDracoMesh.
-int EXPORT_API DecodeDracoMesh(char *data, unsigned int length,
-                               DracoMesh **mesh);
+int EXPORT_API DecodeDracoMesh(char *data, unsigned int length, DracoMesh **mesh);
+
+int EXPORT_API EncodeUnityMesh(char **data, DracoToUnityMesh **mesh);
 
 // Returns |attribute| at |index| in |mesh|.  On input, |attribute| must be
 // null. The returned |attribute| must be released with ReleaseDracoAttribute.
@@ -111,6 +113,10 @@ bool EXPORT_API GetAttributeData(const DracoMesh *mesh,
                                  const DracoAttribute *attribute,
                                  DracoData **data);
 
+void EXPORT_API FreeDracoMesh(char **data);
+
+int EXPORT_API GetSubmeshRanges(const DracoMesh *mesh, DracoData **indices);
+
 // DracoToUnityMesh is deprecated.
 struct EXPORT_API DracoToUnityMesh {
   DracoToUnityMesh()
@@ -120,10 +126,14 @@ struct EXPORT_API DracoToUnityMesh {
         position(nullptr),
         has_normal(false),
         normal(nullptr),
-        has_texcoord(false),
-        texcoord(nullptr),
+        has_uv0(false),
+        texcoord0(nullptr),
+        has_uv1(false),
+        texcoord1(nullptr),
         has_color(false),
-        color(nullptr) {}
+        color(nullptr),
+        num_submesh(0),
+        submesh(nullptr) {}
 
   int num_faces;
   int *indices;
@@ -131,10 +141,14 @@ struct EXPORT_API DracoToUnityMesh {
   float *position;
   bool has_normal;
   float *normal;
-  bool has_texcoord;
-  float *texcoord;
+  bool has_uv0;
+  float *texcoord0;
+  bool has_uv1;
+  float *texcoord1;
   bool has_color;
   float *color;
+  int num_submesh;
+  int *submesh;
 };
 
 // ReleaseUnityMesh is deprecated.

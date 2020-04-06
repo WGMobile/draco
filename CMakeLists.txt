@@ -52,7 +52,7 @@ option(ENABLE_WASM "" OFF)
 option(ENABLE_WERROR "" OFF)
 option(ENABLE_WEXTRA "" OFF)
 option(IGNORE_EMPTY_BUILD_TYPE "" OFF)
-option(BUILD_UNITY_PLUGIN "Build plugin library for Unity." OFF)
+option(BUILD_UNITY_PLUGIN "Build plugin library for Unity." ON)
 option(BUILD_ANIMATION_ENCODING "" OFF)
 option(BUILD_FOR_GLTF "" OFF)
 option(BUILD_MAYA_PLUGIN "Build plugin library for Maya." OFF)
@@ -949,20 +949,38 @@ else()
     list(APPEND draco_header_only_targets dracodec_unity)
     add_library(dracodec_unity ${unity_decoder_lib_type}
                 $<TARGET_OBJECTS:draco_attributes>
+
+                $<TARGET_OBJECTS:draco_compression_attributes_enc>
+				$<TARGET_OBJECTS:draco_compression_attributes_pred_schemes_enc>
+
                 $<TARGET_OBJECTS:draco_compression_attributes_dec>
                 $<TARGET_OBJECTS:draco_compression_bit_coders>
                 $<TARGET_OBJECTS:draco_compression_decode>
                 $<TARGET_OBJECTS:draco_compression_entropy>
                 $<TARGET_OBJECTS:draco_compression_mesh_dec>
                 $<TARGET_OBJECTS:draco_compression_point_cloud_dec>
+
+                $<TARGET_OBJECTS:draco_compression_encode>
+                $<TARGET_OBJECTS:draco_compression_mesh_enc>
+                $<TARGET_OBJECTS:draco_compression_point_cloud_enc>
+
                 $<TARGET_OBJECTS:draco_core>
                 $<TARGET_OBJECTS:draco_dec_config>
+
+                $<TARGET_OBJECTS:draco_enc_config>
+
                 $<TARGET_OBJECTS:draco_io>
                 $<TARGET_OBJECTS:draco_mesh>
                 $<TARGET_OBJECTS:draco_metadata>
                 $<TARGET_OBJECTS:draco_metadata_dec>
+
+                $<TARGET_OBJECTS:draco_metadata_enc>
+
                 $<TARGET_OBJECTS:draco_point_cloud>
                 $<TARGET_OBJECTS:draco_points_dec>
+
+                $<TARGET_OBJECTS:draco_points_enc>
+
                 $<TARGET_OBJECTS:draco_unity_plugin>)
     # For Mac, we need to build a .bundle for plugin.
     if(APPLE)
